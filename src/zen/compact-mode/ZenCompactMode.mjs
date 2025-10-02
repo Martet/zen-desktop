@@ -24,6 +24,20 @@ XPCOMUtils.defineLazyPreferenceGetter(
   true
 );
 
+XPCOMUtils.defineLazyPreferenceGetter(
+  lazyCompactMode,
+  'COMPACT_MODE_TOGGLE_ON_WIDTH',
+  'zen.view.compact.toggle-on-width',
+  false
+);
+
+XPCOMUtils.defineLazyPreferenceGetter(
+  lazyCompactMode,
+  'COMPACT_MODE_TOGGLE_ON_WIDTH_THRESHOLD',
+  'zen.view.compact.toggle-on-width.threshold',
+  800
+);
+
 ChromeUtils.defineLazyGetter(lazyCompactMode, 'mainAppWrapper', () =>
   document.getElementById('zen-main-app-wrapper')
 );
@@ -83,8 +97,14 @@ var gZenCompactModeManager = {
       });
     }
 
+    this._lastWindowWidth = window.innerWidth;
+    this._changedDueToResize =
+      lazyCompactMode.COMPACT_MODE_TOGGLE_ON_WIDTH &&
+      this._lastWindowWidth < lazyCompactMode.COMPACT_MODE_TOGGLE_ON_WIDTH_THRESHOLD;
+    window.addEventListener('resize', () => this._onWindowResize());
+
     SessionStore.promiseAllWindowsRestored.then(() => {
-      this.preference = this._wasInCompactMode;
+      this.preference = this._wasInCompactMode || this._changedDueToResize;
     });
   },
 
@@ -107,6 +127,8 @@ var gZenCompactModeManager = {
       value = false;
     }
     this.log('Setting compact mode preference to', value);
+    const changedDueToResize = this._changedDueToResize;
+    this._changedDueToResize = false;
     if (
       this.preference === value ||
       document.documentElement.hasAttribute('zen-compact-animating')
@@ -123,8 +145,9 @@ var gZenCompactModeManager = {
     // main-window can't store attributes other than window sizes, so we use this instead
     lazyCompactMode.mainAppWrapper.setAttribute('zen-compact-mode', value);
     document.documentElement.setAttribute('zen-compact-mode', value);
-    if (typeof this._wasInCompactMode === 'undefined') {
+    if (typeof this._wasInCompactMode === 'undefined' && !changedDueToResize) {
       Services.prefs.setBoolPref('zen.view.compact.enable-at-startup', value);
+      this.log('Updated zen.view.compact.enable-at-startup to', value);
     }
     this._updateEvent();
   },
@@ -727,6 +750,25 @@ var gZenCompactModeManager = {
       });
     }
     delete this._nextTimeWillBeActive;
+  },
+
+  _onWindowResize() {
+    if (!lazyCompactMode.COMPACT_MODE_TOGGLE_ON_WIDTH) {
+      return;
+    }
+
+    const threshold = lazyCompactMode.COMPACT_MODE_TOGGLE_ON_WIDTH_THRESHOLD;
+    const crossedThreshold =
+      (this._lastWindowWidth < threshold && window.innerWidth >= threshold) ||
+      (this._lastWindowWidth >= threshold && window.innerWidth < threshold);
+    this._lastWindowWidth = window.innerWidth;
+    if (!crossedThreshold) {
+      return;
+    }
+
+    this.log('Window width crossed threshold', window.innerWidth);
+    this._changedDueToResize = true;
+    this.preference = window.innerWidth < threshold;
   },
 };
 

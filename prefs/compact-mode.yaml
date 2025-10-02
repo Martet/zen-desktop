@@ -26,6 +26,12 @@
 - name: zen.view.compact.show-background-tab-toast
   value: true
 
+- name: zen.view.compact.toggle-on-width
+  value: false
+
+- name: zen.view.compact.toggle-on-width.threshold
+  value: 800
+
 - name: zen.view.compact.debug
   value: false
 
